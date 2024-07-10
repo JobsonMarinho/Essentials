@@ -8,6 +8,9 @@ import com.earth2me.essentials.utils.NumberUtil;
 import com.earth2me.essentials.utils.StringUtil;
 import net.ess3.api.IUser;
 import net.ess3.api.TranslatableException;
+import net.ess3.api.events.UserWarpEvent;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
@@ -52,7 +55,18 @@ public class Commandwarp extends EssentialsCommand {
             throw new NoChargeException();
         }
         final User otherUser = getPlayer(server, args, 1, true, false);
-        otherUser.getAsyncTeleport().warp(otherUser, args[0], null, TeleportCause.COMMAND, getNewExceptionFuture(sender, commandLabel));
+        final UserWarpEvent event = new UserWarpEvent(otherUser, args[0], null);
+        Bukkit.getServer().getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            return;
+        }
+        String warp = event.getWarp();
+        Location loc = ess.getWarps().getWarp(warp);
+        if (loc == null) {
+            throw new TranslatableException("warpNotFound", warp);
+        }
+        otherUser.getBase().teleport(loc, TeleportCause.COMMAND);
+        //otherUser.getAsyncTeleport().warp(otherUser, args[0], null, TeleportCause.COMMAND, getNewExceptionFuture(sender, commandLabel));
         throw new NoChargeException();
     }
 
