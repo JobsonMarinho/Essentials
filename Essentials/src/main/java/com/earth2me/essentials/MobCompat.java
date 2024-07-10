@@ -296,7 +296,10 @@ public final class MobCompat {
         }
 
         private Villager.Profession asEnum() {
-            return EnumUtil.valueOf(Villager.Profession.class, newProfession, oldProfession);
+            // Original Code EnumUtil.valueOf(Villager.Profession.class, newProfession, oldProfession);
+            // My Server Don't Use This Then I Commented
+            // and Return Villager.Profession.NONE
+            return Villager.Profession.NONE;
         }
     }
 
