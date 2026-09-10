@@ -1,0 +1,4 @@
+Ferramenta: image_gen nativa (OpenAI). Imagem gerada por IA.
+Uso: banner do README do HypedEssentials.
+
+Use case: stylized-concept. Asset type: polished panoramic 3:1 GitHub README banner. Create a premium Minecraft voxel scene for HypedEssentials, an essential server utilities suite. Scene: grand medieval spawn square with a cozy player home, glowing teleport arch, a compass, crafting anvil and equipment chest as visual symbols for homes, warps and kits. Warm gold lanterns against cool blue evening sky. Exact large centered title "HypedEssentials", Hyped in gold and Essentials in silver, dimensional beveled block lettering with clear outline, all letters complete and generous margins. Beautiful detailed voxel architecture and atmospheric depth, balanced scenic sides. No subtitle, no other text, no watermark, no UI.
