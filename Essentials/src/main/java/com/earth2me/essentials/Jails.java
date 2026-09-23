@@ -3,7 +3,6 @@ package com.earth2me.essentials;
 import com.earth2me.essentials.config.ConfigurateUtil;
 import com.earth2me.essentials.config.EssentialsConfiguration;
 import com.earth2me.essentials.config.entities.LazyLocation;
-import com.earth2me.essentials.utils.AdventureUtil;
 import net.ess3.api.IEssentials;
 import net.ess3.api.IUser;
 import net.ess3.api.TranslatableException;
@@ -40,7 +39,7 @@ import java.util.logging.Level;
 import static com.earth2me.essentials.I18n.tlLiteral;
 
 public class Jails implements net.ess3.api.IJails {
-    private static transient boolean enabled = false;
+    private static boolean enabled = false;
     private final IEssentials ess;
     private final EssentialsConfiguration config;
     private final Map<String, LazyLocation> jails = new HashMap<>();
@@ -138,28 +137,6 @@ public class Jails implements net.ess3.api.IJails {
             if (jails.remove(jail) != null) {
                 config.getSection("jails").node(jail).set(null);
                 config.save();
-            }
-        }
-    }
-
-    /**
-     * @deprecated This method does not use asynchronous teleportation. Use {@link Jails#sendToJail(IUser, String, CompletableFuture)}
-     */
-    @SuppressWarnings("deprecation")
-    @Override
-    @Deprecated
-    public void sendToJail(final IUser user, String jail) throws Exception {
-        if (jail == null || jail.isEmpty()) {
-            return;
-        }
-
-        jail = jail.toLowerCase(Locale.ENGLISH);
-        synchronized (jails) {
-            if (jails.containsKey(jail)) {
-                if (user.getBase().isOnline()) {
-                    user.getTeleport().now(getJail(jail), false, TeleportCause.COMMAND);
-                }
-                user.setJail(jail);
             }
         }
     }
@@ -295,9 +272,9 @@ public class Jails implements net.ess3.api.IJails {
                 event.setRespawnLocation(getJail(user.getJail()));
             } catch (final Exception ex) {
                 if (ess.getSettings().isDebug()) {
-                    ess.getLogger().log(Level.INFO, AdventureUtil.miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())), ex);
+                    ess.getLogger().log(Level.INFO, ess.getAdventureFacet().miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())), ex);
                 } else {
-                    ess.getLogger().log(Level.INFO, AdventureUtil.miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())));
+                    ess.getLogger().log(Level.INFO, ess.getAdventureFacet().miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())));
                 }
             }
         }
@@ -317,9 +294,9 @@ public class Jails implements net.ess3.api.IJails {
                 event.setTo(getJail(user.getJail()));
             } catch (final Exception ex) {
                 if (ess.getSettings().isDebug()) {
-                    ess.getLogger().log(Level.INFO, AdventureUtil.miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())), ex);
+                    ess.getLogger().log(Level.INFO, ess.getAdventureFacet().miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())), ex);
                 } else {
-                    ess.getLogger().log(Level.INFO, AdventureUtil.miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())));
+                    ess.getLogger().log(Level.INFO, ess.getAdventureFacet().miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())));
                 }
             }
             user.sendTl("jailMessage");
@@ -341,9 +318,9 @@ public class Jails implements net.ess3.api.IJails {
             final CompletableFuture<Boolean> future = new CompletableFuture<>();
             future.exceptionally(ex -> {
                 if (ess.getSettings().isDebug()) {
-                    ess.getLogger().log(Level.INFO, AdventureUtil.miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())), ex);
+                    ess.getLogger().log(Level.INFO, ess.getAdventureFacet().miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())), ex);
                 } else {
-                    ess.getLogger().log(Level.INFO, AdventureUtil.miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())));
+                    ess.getLogger().log(Level.INFO, ess.getAdventureFacet().miniToLegacy(tlLiteral("returnPlayerToJailError", user.getName(), ex.getLocalizedMessage())));
                 }
                 return false;
             });

@@ -42,7 +42,9 @@ public abstract class UserData extends PlayerExtension implements IConf {
         super(base);
         this.ess = (Essentials) ess;
         final File folder = new File(ess.getDataFolder(), "userdata");
-        if (!folder.exists() && !folder.mkdirs()) {
+        // mkdirs() may return false if another thread created the folder concurrently,
+        // so fall back to checking whether the directory now exists to avoid a race.
+        if (!folder.isDirectory() && !folder.mkdirs() && !folder.isDirectory()) {
             throw new RuntimeException("Unable to create userdata folder!");
         }
 
@@ -74,6 +76,7 @@ public abstract class UserData extends PlayerExtension implements IConf {
 
     public final void cleanup() {
         config.blockingSave();
+        ess.getUsers().removeCache(getConfigUUID());
     }
 
     @Override
@@ -271,6 +274,10 @@ public abstract class UserData extends PlayerExtension implements IConf {
         return !holder.powertools().isEmpty();
     }
 
+    public Map<String, List<String>> getAllPowertools() {
+        return holder.powertools();
+    }
+
     public Location getLastLocation() {
         final LazyLocation lastLocation = holder.lastLocation();
         return lastLocation != null ? lastLocation.location() : null;
@@ -348,7 +355,17 @@ public abstract class UserData extends PlayerExtension implements IConf {
     }
 
     public int getMailAmount() {
-        return holder.mail() == null ? 0 : holder.mail().size();
+        if (holder.mail() == null) {
+            return 0;
+        }
+
+        int amount = 0;
+        for (MailMessage element : holder.mail()) {
+            if (!element.isExpired()) {
+                amount++;
+            }
+        }
+        return amount;
     }
 
     public int getUnreadMailAmount() {
@@ -358,7 +375,7 @@ public abstract class UserData extends PlayerExtension implements IConf {
 
         int unread = 0;
         for (MailMessage element : holder.mail()) {
-            if (!element.isRead()) {
+            if (!element.isRead() && !element.isExpired()) {
                 unread++;
             }
         }
@@ -451,6 +468,15 @@ public abstract class UserData extends PlayerExtension implements IConf {
 
     public void setGodModeEnabled(final boolean set) {
         holder.godMode(set);
+        config.save();
+    }
+
+    public boolean isFlyModeEnabled() {
+        return holder.flyMode();
+    }
+
+    public void setFlyModeEnabled(final boolean set) {
+        holder.flyMode(set);
         config.save();
     }
 

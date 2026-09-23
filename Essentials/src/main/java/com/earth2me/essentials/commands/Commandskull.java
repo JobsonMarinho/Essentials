@@ -9,6 +9,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.ess3.api.TranslatableException;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -48,7 +49,14 @@ public class Commandskull extends EssentialsCommand {
     @Override
     protected void run(final Server server, final User user, final String commandLabel, final String[] args) throws Exception {
         final String owner;
-        if (args.length > 0 && user.isAuthorized("essentials.skull.others")) {
+        final User player;
+        if (args.length == 2) {
+            player = getPlayer(server, args, 1, false, false);
+        } else {
+            player = user;
+        }
+
+        if (args.length > 0 && player.isAuthorized("essentials.skull.others")) {
             if (BASE_64_PATTERN.matcher(args[0]).matches()) {
                 try {
                     final String decoded = new String(Base64.getDecoder().decode(args[0]));
@@ -80,9 +88,9 @@ public class Commandskull extends EssentialsCommand {
         final SkullMeta metaSkull;
         boolean spawn = false;
 
-        if (itemSkull != null && MaterialUtil.isPlayerHead(itemSkull)) {
+        if (itemSkull != null && MaterialUtil.isPlayerHead(itemSkull) && user == player) {
             metaSkull = (SkullMeta) itemSkull.getItemMeta();
-        } else if (user.isAuthorized("essentials.skull.spawn")) {
+        } else if (user == player ? user.isAuthorized("essentials.skull.spawn") : user.isAuthorized("essentials.skull.spawn.others")) {
             itemSkull = new ItemStack(SKULL_ITEM, 1, (byte) 3);
             metaSkull = (SkullMeta) itemSkull.getItemMeta();
             spawn = true;
@@ -94,14 +102,14 @@ public class Commandskull extends EssentialsCommand {
             throw new TranslatableException("noPermissionSkull");
         }
 
-        editSkull(user, itemSkull, metaSkull, owner, spawn);
+        editSkull(user, player, itemSkull, metaSkull, owner, spawn);
     }
 
-    private void editSkull(final User user, final ItemStack stack, final SkullMeta skullMeta, final String owner, final boolean spawn) {
+    private void editSkull(final User user, final User receive, final ItemStack stack, final SkullMeta skullMeta, final String owner, final boolean spawn) {
         ess.runTaskAsynchronously(() -> {
             // Run this stuff async because it causes an HTTP request
 
-            final String shortOwnerName;
+            String shortOwnerName;
             if (URL_VALUE_PATTERN.matcher(owner).matches()) {
                 if (!playerProfileSupported) {
                     user.sendTl("unsupportedFeature");
@@ -122,20 +130,46 @@ public class Commandskull extends EssentialsCommand {
 
                 shortOwnerName = owner.substring(0, 7);
             } else {
-                //noinspection deprecation
-                skullMeta.setOwner(owner);
-                shortOwnerName = owner;
+                if (playerProfileSupported) {
+                    try {
+                        PlayerProfile profile = ess.getServer().createPlayerProfile(null, owner);
+                        profile = profile.update().join();
+
+                        if (profile != null) {
+                            skullMeta.setOwnerProfile(profile);
+                        }
+                        if (skullMeta.getOwnerProfile() == null) {
+                            final OfflinePlayer offline = ess.getServer().getOfflinePlayer(owner);
+                            skullMeta.setOwningPlayer(offline);
+                        }
+
+                        shortOwnerName = owner;
+                    } catch (final Exception e) {
+                        //noinspection deprecation
+                        skullMeta.setOwner(owner);
+                        shortOwnerName = owner;
+                    }
+                } else {
+                    //noinspection deprecation
+                    skullMeta.setOwner(owner);
+                    shortOwnerName = owner;
+                }
             }
             skullMeta.setDisplayName("§fSkull of " + shortOwnerName);
+
+            final String shortNameFinal = shortOwnerName;
 
             ess.scheduleSyncDelayedTask(() -> {
                 stack.setItemMeta(skullMeta);
                 if (spawn) {
-                    Inventories.addItem(user.getBase(), stack);
-                    user.sendTl("givenSkull", shortOwnerName);
+                    Inventories.addItem(receive.getBase(), stack);
+                    receive.sendTl("givenSkull", shortNameFinal);
+                    if (user != receive) {
+                        user.sendTl("givenSkullOther", receive.getDisplayName(), shortNameFinal);
+                    }
                     return;
                 }
-                user.sendTl("skullChanged", shortOwnerName);
+                user.sendTl("skullChanged", shortNameFinal);
             });
         });
     }
@@ -144,7 +178,13 @@ public class Commandskull extends EssentialsCommand {
     protected List<String> getTabCompleteOptions(final Server server, final User user, final String commandLabel, final String[] args) {
         if (args.length == 1) {
             if (user.isAuthorized("essentials.skull.others")) {
-                return getPlayers(server, user);
+                return getPlayers(user);
+            } else {
+                return Lists.newArrayList(user.getName());
+            }
+        } else if (args.length == 2){
+            if (user.isAuthorized("essentials.skull.others")) {
+                return getPlayers(user);
             } else {
                 return Lists.newArrayList(user.getName());
             }

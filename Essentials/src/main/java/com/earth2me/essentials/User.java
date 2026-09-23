@@ -1,12 +1,13 @@
 package com.earth2me.essentials;
 
+import com.earth2me.essentials.adventure.AdventureUtil;
+import com.earth2me.essentials.adventure.ComponentHolder;
 import com.earth2me.essentials.commands.IEssentialsCommand;
 import com.earth2me.essentials.craftbukkit.Inventories;
 import com.earth2me.essentials.economy.EconomyLayer;
 import com.earth2me.essentials.economy.EconomyLayers;
 import com.earth2me.essentials.messaging.IMessageRecipient;
 import com.earth2me.essentials.messaging.SimpleMessageRecipient;
-import com.earth2me.essentials.utils.AdventureUtil;
 import com.earth2me.essentials.utils.DateUtil;
 import com.earth2me.essentials.utils.EnumUtil;
 import com.earth2me.essentials.utils.FormatUtil;
@@ -21,10 +22,10 @@ import net.ess3.api.events.AfkStatusChangeEvent;
 import net.ess3.api.events.JailStatusChangeEvent;
 import net.ess3.api.events.MuteStatusChangeEvent;
 import net.ess3.api.events.UserBalanceUpdateEvent;
+import net.ess3.provider.PlayerLocaleProvider;
+import net.essentialsx.api.v2.events.PreTransactionEvent;
 import net.essentialsx.api.v2.events.TransactionEvent;
 import net.essentialsx.api.v2.services.mail.MailSender;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.ComponentLike;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Statistic;
@@ -62,8 +63,6 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
     // User modules
     private final IMessageRecipient messageRecipient;
     private transient final AsyncTeleport teleport;
-    @SuppressWarnings("deprecation")
-    private transient final Teleport legacyTeleport;
 
     // User command confirmation strings
     private final Map<User, BigDecimal> confirmingPayments = new WeakHashMap<>();
@@ -101,14 +100,13 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
     // Misc
     private transient final List<String> signCopy = Lists.newArrayList("", "", "", "");
     private transient long lastVanishTime = System.currentTimeMillis();
+    private transient int flightTick = -1;
     private String lastLocaleString;
     private Locale playerLocale;
 
     public User(final Player base, final IEssentials ess) {
         super(base, ess);
         teleport = new AsyncTeleport(this, ess);
-        //noinspection deprecation
-        legacyTeleport = new Teleport(this, ess);
         if (isAfk()) {
             afkPosition = this.getLocation();
         }
@@ -138,6 +136,10 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
 
     @Override
     public boolean isAuthorized(final String node) {
+        if (Essentials.TESTING) {
+            return false;
+        }
+
         final boolean result = isAuthorizedCheck(node);
         if (ess.getSettings().isDebug()) {
             ess.getLogger().log(Level.INFO, "checking if " + base.getName() + " has " + node + " - " + result);
@@ -146,7 +148,24 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
     }
 
     @Override
+    public boolean isAuthorizedCached(final String node) {
+        if (Essentials.TESTING) {
+            return false;
+        }
+
+        final boolean result = isAuthorizedCachedCheck(node);
+        if (ess.getSettings().isDebug()) {
+            ess.getLogger().log(Level.INFO, "checking if " + base.getName() + " has " + node + " (cached) - " + result);
+        }
+        return result;
+    }
+
+    @Override
     public boolean isPermissionSet(final String node) {
+        if (Essentials.TESTING) {
+            return false;
+        }
+
         final boolean result = isPermSetCheck(node);
         if (ess.getSettings().isDebug()) {
             ess.getLogger().log(Level.INFO, "checking if " + base.getName() + " has " + node + " (set-explicit) - " + result);
@@ -169,6 +188,24 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
 
         try {
             return ess.getPermissionsHandler().hasPermission(base, node);
+        } catch (final Exception ex) {
+            if (ess.getSettings().isDebug()) {
+                ess.getLogger().log(Level.SEVERE, "Permission System Error: " + ess.getPermissionsHandler().getName() + " returned: " + ex.getMessage(), ex);
+            } else {
+                ess.getLogger().log(Level.SEVERE, "Permission System Error: " + ess.getPermissionsHandler().getName() + " returned: " + ex.getMessage());
+            }
+
+            return false;
+        }
+    }
+
+    private boolean isAuthorizedCachedCheck(final String node) {
+        if (base instanceof OfflinePlayerStub) {
+            return false;
+        }
+
+        try {
+            return ess.getPermissionsHandler().hasPermissionCached(base, node);
         } catch (final Exception ex) {
             if (ess.getSettings().isDebug()) {
                 ess.getLogger().log(Level.SEVERE, "Permission System Error: " + ess.getPermissionsHandler().getName() + " returned: " + ex.getMessage(), ex);
@@ -247,9 +284,9 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
             return;
         }
         setMoney(getMoney().add(value), cause);
-        sendTl("addedToAccount", NumberUtil.displayCurrency(value, ess));
+        sendTl("addedToAccount", AdventureUtil.parsed(NumberUtil.displayCurrency(value, ess)));
         if (initiator != null) {
-            initiator.sendTl("addedToOthersAccount", NumberUtil.displayCurrency(value, ess), getDisplayName(), NumberUtil.displayCurrency(getMoney(), ess));
+            initiator.sendTl("addedToOthersAccount", AdventureUtil.parsed(NumberUtil.displayCurrency(value, ess)), getDisplayName(), AdventureUtil.parsed(NumberUtil.displayCurrency(getMoney(), ess)));
         }
     }
 
@@ -258,20 +295,28 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
         payUser(reciever, value, UserBalanceUpdateEvent.Cause.UNKNOWN);
     }
 
-    public void payUser(final User reciever, final BigDecimal value, final UserBalanceUpdateEvent.Cause cause) throws Exception {
+    public void payUser(final User reciever, BigDecimal value, final UserBalanceUpdateEvent.Cause cause) throws Exception {
         if (value.compareTo(BigDecimal.ZERO) < 1) {
             throw new Exception(tlLocale(playerLocale, "payMustBePositive"));
         }
 
         if (canAfford(value)) {
+            // Call an event for pre-transaction
+            final PreTransactionEvent preTransactionEvent = new PreTransactionEvent(this.getSource(), reciever, value);
+            ess.getServer().getPluginManager().callEvent(preTransactionEvent);
+            if (preTransactionEvent.isCancelled()) {
+                return;
+            }
+            value = preTransactionEvent.getAmount();
+
             setMoney(getMoney().subtract(value), cause);
             reciever.setMoney(reciever.getMoney().add(value), cause);
-            sendTl("moneySentTo", NumberUtil.displayCurrency(value, ess), reciever.getDisplayName());
-            reciever.sendTl("moneyRecievedFrom", NumberUtil.displayCurrency(value, ess), getDisplayName());
+            sendTl("moneySentTo", AdventureUtil.parsed(NumberUtil.displayCurrency(value, ess)), reciever.getDisplayName());
+            reciever.sendTl("moneyRecievedFrom", AdventureUtil.parsed(NumberUtil.displayCurrency(value, ess)), getDisplayName());
             final TransactionEvent transactionEvent = new TransactionEvent(this.getSource(), reciever, value);
             ess.getServer().getPluginManager().callEvent(transactionEvent);
         } else {
-            throw new ChargeException("notEnoughMoney", NumberUtil.displayCurrency(value, ess));
+            throw new ChargeException("notEnoughMoney", AdventureUtil.parsed(NumberUtil.displayCurrency(value, ess)));
         }
     }
 
@@ -294,9 +339,9 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
         } catch (final MaxMoneyException ex) {
             ess.getLogger().log(Level.WARNING, "Invalid call to takeMoney, total balance can't be more than the max-money limit.", ex);
         }
-        sendTl("takenFromAccount", NumberUtil.displayCurrency(value, ess));
+        sendTl("takenFromAccount", AdventureUtil.parsed(NumberUtil.displayCurrency(value, ess)));
         if (initiator != null) {
-            initiator.sendTl("takenFromOthersAccount", NumberUtil.displayCurrency(value, ess), getDisplayName(), NumberUtil.displayCurrency(getMoney(), ess));
+            initiator.sendTl("takenFromOthersAccount", AdventureUtil.parsed(NumberUtil.displayCurrency(value, ess)), getDisplayName(), AdventureUtil.parsed(NumberUtil.displayCurrency(getMoney(), ess)));
         }
     }
 
@@ -373,13 +418,6 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
 
         // Add request to queue
         teleportRequestQueue.put(request.getName(), request);
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    @Deprecated
-    public boolean hasOutstandingTeleportRequest() {
-        return getNextTpaRequest(false, false, false) != null;
     }
 
     public Collection<String> getPendingTpaKeys() {
@@ -565,16 +603,6 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
         return teleport;
     }
 
-    /**
-     * @deprecated This API is not asynchronous. Use {@link User#getAsyncTeleport()}
-     */
-    @SuppressWarnings("deprecation")
-    @Override
-    @Deprecated
-    public Teleport getTeleport() {
-        return legacyTeleport;
-    }
-
     public long getLastOnlineActivity() {
         return lastOnlineActivity;
     }
@@ -659,7 +687,7 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
             return;
         }
 
-        this.getBase().setSleepingIgnored(this.isAuthorized("essentials.sleepingignored") || (set && ess.getSettings().sleepIgnoresAfkPlayers()));
+        this.getBase().setSleepingIgnored(this.isAuthorized("essentials.sleepingignored") || set && ess.getSettings().sleepIgnoresAfkPlayers());
         if (set && !isAfk()) {
             afkPosition = this.getLocation();
             this.afkSince = System.currentTimeMillis();
@@ -794,6 +822,29 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
         return false;
     }
 
+    // Notifies this (muted) user that they have been silenced, including the reason and remaining time if applicable.
+    public void notifyMuted() {
+        final String dateDiff = getMuteTimeout() > 0 ? DateUtil.formatDateDiff(getMuteTimeout()) : null;
+        if (dateDiff == null) {
+            if (hasMuteReason()) {
+                sendTl("voiceSilencedReason", getMuteReason());
+            } else {
+                sendTl("voiceSilenced");
+            }
+        } else {
+            if (hasMuteReason()) {
+                sendTl("voiceSilencedReasonTime", dateDiff, getMuteReason());
+            } else {
+                sendTl("voiceSilencedTime", dateDiff);
+            }
+        }
+    }
+
+    @Override
+    public long getLastActivityTime() {
+        return this.lastActivity;
+    }
+
     @Deprecated
     public void updateActivity(final boolean broadcast) {
         updateActivity(broadcast, AfkStatusChangeEvent.Cause.UNKNOWN);
@@ -838,24 +889,39 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
             return;
         }
 
-        final long autoafkkick = ess.getSettings().getAutoAfkKick();
-        if (autoafkkick > 0
-                && lastActivity > 0 && (lastActivity + (autoafkkick * 1000)) < System.currentTimeMillis()
+        final long autoafktimeout = ess.getSettings().getAutoAfkTimeout();
+
+        // Checks if the player has been inactive for longer than the configured auto-afk-timeout time.
+        if (autoafktimeout > 0
+                && lastActivity > 0 && (lastActivity + (autoafktimeout * 1000)) < System.currentTimeMillis()
                 && !isAuthorized("essentials.kick.exempt")
                 && !isAuthorized("essentials.afk.kickexempt")) {
             lastActivity = 0;
-            final double kickTime = autoafkkick / 60.0;
+            final double kickTime = autoafktimeout / 60.0;
 
-            this.getBase().kickPlayer(AdventureUtil.miniToLegacy(playerTl("autoAfkKickReason", kickTime)));
+            // If `afk-timeout-command` in config.yml is empty, use default Essentials kicking behaviour instead of executing a command.
+            if (ess.getSettings().getAfkTimeoutCommands().isEmpty()) {
+                this.getBase().kickPlayer(ess.getAdventureFacet().miniToLegacy(playerTl("autoAfkKickReason", kickTime)));
 
-            for (final User user : ess.getOnlineUsers()) {
-                if (user.isAuthorized("essentials.kick.notify")) {
-                    user.sendTl("playerKicked", Console.DISPLAY_NAME, getName(), user.playerTl("autoAfkKickReason", kickTime));
+                for (final User user : ess.getOnlineUsers()) {
+                    if (user.isAuthorized("essentials.kick.notify")) {
+                        user.sendTl("playerKicked", Console.displayName(), getName(), user.playerTl("autoAfkKickReason", kickTime));
+                    }
+                }
+            } else {
+                // If `afk-timeout-commands` in config.yml is populated, execute the command(s) instead of kicking the player.
+                for (final String command : ess.getSettings().getAfkTimeoutCommands()) {
+                    if (command == null || command.isEmpty()){
+                        continue;
+                    }
+                    // Replace placeholders in the command with actual values.
+                    final String cmd = command.replace("{USERNAME}", getName()).replace("{KICKTIME}", String.valueOf(kickTime));
+                    ess.getServer().dispatchCommand(ess.getServer().getConsoleSender(), cmd);
                 }
             }
         }
         final long autoafk = ess.getSettings().getAutoAfk();
-        if (!isAfk() && autoafk > 0 && lastActivity + autoafk * 1000 < System.currentTimeMillis() && isAuthorized("essentials.afk.auto")) {
+        if (!isAfk() && autoafk > 0 && lastActivity + autoafk * 1000 < System.currentTimeMillis() && isAuthorizedCached("essentials.afk.auto")) {
             setAfk(true, AfkStatusChangeEvent.Cause.ACTIVITY);
             if (isAfk() && !isHidden()) {
                 setDisplayNick();
@@ -1065,14 +1131,14 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
     }
 
     @Override
-    public void sendComponent(ComponentLike component) {
-        ess.getBukkitAudience().player(base).sendMessage(component);
+    public void sendComponent(ComponentHolder component) {
+        ess.getAdventureFacet().send(base, component);
     }
 
     @Override
-    public Component tlComponent(String tlKey, Object... args) {
+    public ComponentHolder tlComponent(String tlKey, Object... args) {
         final String translation = playerTl(tlKey, args);
-        return AdventureUtil.miniMessage().deserialize(translation);
+        return ess.getAdventureFacet().deserializeMiniMessage(translation);
     }
 
     @Override
@@ -1082,13 +1148,17 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
             return;
         }
 
-        sendComponent(AdventureUtil.miniMessage().deserialize(translation));
+        sendComponent(ess.getAdventureFacet().deserializeMiniMessage(translation));
     }
 
     @Override
     public String playerTl(String tlKey, Object... args) {
         if (ess.getSettings().isPerPlayerLocale()) {
-            return tlLocale(getPlayerLocale(ess.getPlayerLocaleProvider().getLocale(base)), tlKey, args);
+            final PlayerLocaleProvider provider = ess.provider(PlayerLocaleProvider.class);
+            final Locale locale = base != null ? getPlayerLocale(provider.getLocale(base)) : playerLocale;
+            if (locale != null) {
+                return tlLocale(locale, tlKey, args);
+            }
         }
         return tlLiteral(tlKey, args);
     }
@@ -1099,7 +1169,7 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
     }
 
     public Locale getPlayerLocale(final String locale) {
-        if (locale.equals(lastLocaleString)) {
+        if (locale == null || locale.equals(lastLocaleString)) {
             return playerLocale;
         }
         lastLocaleString = locale;
@@ -1296,5 +1366,13 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
             return toggleShout = isShouting();
         }
         return toggleShout == null ? toggleShout = ess.getSettings().isShoutDefault() : toggleShout;
+    }
+
+    public int getFlightTick() {
+        return flightTick;
+    }
+
+    public void setFlightTick(int flightTick) {
+        this.flightTick = flightTick;
     }
 }

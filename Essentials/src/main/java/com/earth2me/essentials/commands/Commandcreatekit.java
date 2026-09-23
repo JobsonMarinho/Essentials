@@ -6,6 +6,7 @@ import com.earth2me.essentials.craftbukkit.Inventories;
 import com.earth2me.essentials.utils.DateUtil;
 import com.earth2me.essentials.utils.PasteUtil;
 import net.ess3.api.TranslatableException;
+import net.ess3.provider.SerializationProvider;
 import org.bukkit.Material;
 import org.bukkit.Server;
 import org.bukkit.inventory.ItemStack;
@@ -42,20 +43,22 @@ public class Commandcreatekit extends EssentialsCommand {
         final ItemStack[] items = Inventories.getInventory(user.getBase(), true);
         final List<String> list = new ArrayList<>();
 
+        final SerializationProvider serializationProvider = ess.provider(SerializationProvider.class);
         boolean useSerializationProvider = ess.getSettings().isUseBetterKits();
 
-        if (useSerializationProvider && ess.getSerializationProvider() == null) {
+        if (useSerializationProvider && serializationProvider == null) {
             ess.showError(user.getSource(), new TranslatableException("createKitUnsupported"), commandLabel);
             useSerializationProvider = false;
         }
 
-        for (ItemStack is : items) {
+        for (int i = 0; i < items.length; i++) {
+            final ItemStack is = items[i];
             if (is != null && is.getType() != null && is.getType() != Material.AIR) {
                 final String serialized;
                 if (useSerializationProvider) {
-                    serialized = "@" + Base64Coder.encodeLines(ess.getSerializationProvider().serializeItem(is));
+                    serialized = "slot:" + i + " @" + Base64Coder.encodeLines(serializationProvider.serializeItem(is));
                 } else {
-                    serialized = ess.getItemDb().serialize(is);
+                    serialized = "slot:" + i + " " + ess.getItemDb().serialize(is);
                 }
                 list.add(serialized);
             }

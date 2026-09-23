@@ -1,6 +1,5 @@
 package net.essentialsx.discordlink.listeners;
 
-import com.earth2me.essentials.utils.AdventureUtil;
 import com.earth2me.essentials.utils.FormatUtil;
 import net.essentialsx.api.v2.events.AsyncUserDataLoadEvent;
 import net.essentialsx.api.v2.events.UserMailEvent;
@@ -60,7 +59,7 @@ public class LinkBukkitListener implements Listener {
             } catch (IllegalArgumentException e) {
                 code = e.getMessage();
             }
-            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, AdventureUtil.miniToLegacy(tlLiteral("discordLinkLoginKick", "/link " + code, ess.getApi().getInviteUrl())));
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, ess.getEss().getAdventureFacet().miniToLegacy(tlLiteral("discordLinkLoginKick", "/link " + code, ess.getApi().getInviteUrl())));
         }
     }
 
@@ -140,7 +139,13 @@ public class LinkBukkitListener implements Listener {
     @EventHandler
     public void onUserLinkStatusChange(final DiscordLinkStatusChangeEvent event) {
         if (event.isLinked() || ess.getSettings().getLinkPolicy() == DiscordLinkSettings.LinkPolicy.NONE) {
-            event.getUser().setFreeze(false);
+            if (event.getUser() != null) {
+                event.getUser().setFreeze(false);
+            }
+            return;
+        }
+
+        if (event.getUser() == null || !event.getUser().getBase().isOnline()) {
             return;
         }
 
@@ -154,7 +159,7 @@ public class LinkBukkitListener implements Listener {
 
         switch (ess.getSettings().getLinkPolicy()) {
             case KICK: {
-                final Runnable kickTask = () -> event.getUser().getBase().kickPlayer(AdventureUtil.miniToLegacy(event.getUser().playerTl("discordLinkLoginKick", "/link " + finalCode, ess.getApi().getInviteUrl())));
+                final Runnable kickTask = () -> event.getUser().getBase().kickPlayer(ess.getEss().getAdventureFacet().miniToLegacy(event.getUser().playerTl("discordLinkLoginKick", "/link " + finalCode, ess.getApi().getInviteUrl())));
                 if (Bukkit.isPrimaryThread()) {
                     kickTask.run();
                 } else {

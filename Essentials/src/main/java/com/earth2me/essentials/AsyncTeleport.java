@@ -12,7 +12,6 @@ import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import io.papermc.lib.PaperLib;
 import net.ess3.api.IEssentials;
 import net.ess3.api.IUser;
-import net.ess3.api.InvalidWorldException;
 import net.ess3.api.TranslatableException;
 import net.ess3.api.events.UserWarpEvent;
 import net.ess3.api.events.teleport.PreTeleportEvent;
@@ -456,7 +455,7 @@ public class AsyncTeleport implements IAsyncTeleport {
         final Location loc;
         try {
             loc = ess.getWarps().getWarp(warp);
-        } catch (final WarpNotFoundException | InvalidWorldException e) {
+        } catch (final WarpNotFoundException e) {
             future.completeExceptionally(e);
             return;
         }
@@ -488,6 +487,10 @@ public class AsyncTeleport implements IAsyncTeleport {
     @Override
     public void back(final CompletableFuture<Boolean> future) {
         nowAsync(teleportOwner, new LocationTarget(teleportOwner.getLastLocation()), TeleportCause.COMMAND, future);
+    }
+
+    public TeleportType getTpType() {
+        return this.tpType;
     }
 
     public void setTpType(final TeleportType tpType) {

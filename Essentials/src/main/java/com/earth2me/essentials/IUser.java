@@ -1,15 +1,13 @@
 package com.earth2me.essentials;
 
+import com.earth2me.essentials.adventure.ComponentHolder;
 import com.earth2me.essentials.api.IAsyncTeleport;
 import com.earth2me.essentials.commands.IEssentialsCommand;
 import com.earth2me.essentials.config.entities.CommandCooldown;
-import net.ess3.api.ITeleport;
 import net.ess3.api.MaxMoneyException;
 import net.ess3.api.events.AfkStatusChangeEvent;
 import net.essentialsx.api.v2.services.mail.MailMessage;
 import net.essentialsx.api.v2.services.mail.MailSender;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.ComponentLike;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -33,6 +31,8 @@ import java.util.regex.Pattern;
 @Deprecated
 public interface IUser {
     boolean isAuthorized(String node);
+
+    boolean isAuthorizedCached(String node);
 
     boolean isAuthorized(IEssentialsCommand cmd);
 
@@ -70,13 +70,9 @@ public interface IUser {
      * @return whether there is a teleport request
      */
     @Deprecated
-    boolean hasOutstandingTeleportRequest();
-
-    /**
-     * @deprecated This API is not asynchronous. Use {@link com.earth2me.essentials.api.IAsyncTeleport IAsyncTeleport} with {@link IUser#getAsyncTeleport()}
-     */
-    @Deprecated
-    ITeleport getTeleport();
+    default boolean hasOutstandingTeleportRequest() {
+        return getNextTpaRequest(false, false, false) != null;
+    }
 
     IAsyncTeleport getAsyncTeleport();
 
@@ -143,9 +139,9 @@ public interface IUser {
 
     void sendMessage(String message);
 
-    void sendComponent(ComponentLike component);
+    void sendComponent(ComponentHolder component);
 
-    Component tlComponent(String tlKey, Object... args);
+    ComponentHolder tlComponent(String tlKey, Object... args);
 
     String playerTl(String tlKey, Object... args);
 
@@ -181,6 +177,17 @@ public interface IUser {
     void setJail(String jail);
 
     String getFormattedJailTime();
+
+    /**
+     * Returns last activity time.
+     * <p>
+     * It is used internally to determine if user's afk status should be set to
+     * true because of ACTIVITY {@link AfkStatusChangeEvent.Cause}, or the player
+     * should be kicked for being afk too long.
+     *
+     * @return Last activity time (Epoch Milliseconds)
+     */
+    long getLastActivityTime();
 
     @Deprecated
     List<String> getMails();

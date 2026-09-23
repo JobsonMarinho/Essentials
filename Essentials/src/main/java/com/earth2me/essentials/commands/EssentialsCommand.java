@@ -11,6 +11,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import net.ess3.api.IEssentials;
 import net.ess3.api.TranslatableException;
+import net.ess3.provider.KnownCommandsProvider;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -35,7 +36,7 @@ public abstract class EssentialsCommand implements IEssentialsCommand {
     /**
      * Common time durations (in seconds), for use in tab completion.
      */
-    protected static final List<String> COMMON_DURATIONS = ImmutableList.of("1", "60", "600", "3600", "86400");
+    public static final List<String> COMMON_DURATIONS = ImmutableList.of("1", "60", "600", "3600", "86400");
     /**
      * Common date diffs, for use in tab completion
      */
@@ -55,7 +56,7 @@ public abstract class EssentialsCommand implements IEssentialsCommand {
             //noinspection InfiniteLoopStatement
             while (true) {
                 final String baseKey = name + "CommandUsage" + i;
-                addUsageString(tlLiteral(baseKey), tlLiteral(baseKey + "Description"));
+                addUsageString(tlLiteral(baseKey), baseKey + "Description");
                 i++;
             }
         } catch (MissingResourceException ignored) {
@@ -218,7 +219,7 @@ public abstract class EssentialsCommand implements IEssentialsCommand {
     // Doesn't need to do any starts-with checks
     protected List<String> getTabCompleteOptions(final Server server, final CommandSource sender, final String commandLabel, final String[] args) {
         // No tab completion results
-        return getPlayers(server, sender);
+        return getPlayers(sender);
     }
 
     boolean canInteractWith(final CommandSource interactor, final User interactee) {
@@ -229,7 +230,7 @@ public abstract class EssentialsCommand implements IEssentialsCommand {
      * Gets a list of all player names that can be seen with by the given CommandSource,
      * for tab completion.
      */
-    protected List<String> getPlayers(final Server server, final CommandSource interactor) {
+    protected List<String> getPlayers(final CommandSource interactor) {
         final List<String> players = Lists.newArrayList();
         for (final User user : ess.getOnlineUsers()) {
             if (canInteractWith(interactor, user)) {
@@ -243,14 +244,8 @@ public abstract class EssentialsCommand implements IEssentialsCommand {
      * Gets a list of all player names that can be seen with by the given User,
      * for tab completion.
      */
-    protected List<String> getPlayers(final Server server, final User interactor) {
-        final List<String> players = Lists.newArrayList();
-        for (final User user : ess.getOnlineUsers()) {
-            if (canInteractWith(interactor, user)) {
-                players.add(ess.getSettings().changeTabCompleteName() ? FormatUtil.stripFormat(user.getDisplayName()) : user.getName());
-            }
-        }
-        return players;
+    protected List<String> getPlayers(final User interactor) {
+        return getPlayers(interactor.getSource());
     }
 
     /**
@@ -277,7 +272,7 @@ public abstract class EssentialsCommand implements IEssentialsCommand {
      * Lists all commands.
      */
     protected final List<String> getCommands(Server server) {
-        final Map<String, Command> commandMap = Maps.newHashMap(this.ess.getKnownCommandsProvider().getKnownCommands());
+        final Map<String, Command> commandMap = Maps.newHashMap(this.ess.provider(KnownCommandsProvider.class).getKnownCommands());
         final List<String> commands = Lists.newArrayListWithCapacity(commandMap.size());
         for (final Command command : commandMap.values()) {
             if (!(command instanceof PluginIdentifiableCommand)) {

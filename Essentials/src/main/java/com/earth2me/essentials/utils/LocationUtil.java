@@ -4,6 +4,7 @@ import com.earth2me.essentials.Essentials;
 import com.earth2me.essentials.IEssentials;
 import net.ess3.api.IUser;
 import net.ess3.api.TranslatableException;
+import net.ess3.provider.WorldInfoProvider;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -113,7 +114,7 @@ public final class LocationUtil {
     }
 
     public static boolean isBlockAboveAir(IEssentials ess, final World world, final int x, final int y, final int z) {
-        return y > ess.getWorldInfoProvider().getMaxHeight(world) || HOLLOW_MATERIALS.contains(world.getBlockAt(x, y - 1, z).getType());
+        return y > ess.provider(WorldInfoProvider.class).getMaxHeight(world) || HOLLOW_MATERIALS.contains(world.getBlockAt(x, y - 1, z).getType());
     }
 
     public static boolean isBlockOutsideWorldBorder(final World world, final int x, final int z) {
@@ -164,6 +165,10 @@ public final class LocationUtil {
 
     public static boolean isBlockUnsafe(IEssentials ess, final World world, final int x, final int y, final int z) {
         return isBlockDamaging(world, x, y, z) || isBlockAboveAir(ess, world, x, y, z);
+    }
+
+    private static boolean isBlockUnsafe(IEssentials ess, final World world, final int x, final int y, final int z, final int maxY) {
+        return y >= maxY || isBlockUnsafe(ess, world, x, y, z);
     }
 
     public static boolean isBlockDamaging(final World world, final int x, final int y, final int z) {
@@ -218,10 +223,14 @@ public final class LocationUtil {
         if (loc == null || loc.getWorld() == null) {
             throw new TranslatableException("destinationNotSet");
         }
+        final WorldInfoProvider worldInfoProvider = ess.provider(WorldInfoProvider.class);
+
         final World world = loc.getWorld();
-        final int worldMinY = ess.getWorldInfoProvider().getMinHeight(world);
-        final int worldLogicalY = ess.getWorldInfoProvider().getLogicalHeight(world);
-        final int worldMaxY = loc.getBlockY() < worldLogicalY ? worldLogicalY : ess.getWorldInfoProvider().getMaxHeight(world);
+        final int worldMinY = worldInfoProvider.getMinHeight(world);
+        final int worldLogicalY = worldInfoProvider.getLogicalHeight(world);
+        final int worldMaxY = ess.getSettings().isConsiderWorldHeightForTeleportSafety() && loc.getBlockY() < worldLogicalY
+                ? worldLogicalY
+                : worldInfoProvider.getMaxHeight(world);
         int x = loc.getBlockX();
         int y = (int) Math.round(loc.getY());
         int z = loc.getBlockZ();
@@ -239,12 +248,12 @@ public final class LocationUtil {
                 break;
             }
         }
-        if (isBlockUnsafe(ess, world, x, y, z)) {
+        if (isBlockUnsafe(ess, world, x, y, z, worldMaxY)) {
             x = Math.round(loc.getX()) == origX ? x - 1 : x + 1;
             z = Math.round(loc.getZ()) == origZ ? z - 1 : z + 1;
         }
         int i = 0;
-        while (isBlockUnsafe(ess, world, x, y, z)) {
+        while (isBlockUnsafe(ess, world, x, y, z, worldMaxY)) {
             i++;
             if (i >= VOLUME.length) {
                 x = origX;
@@ -256,14 +265,14 @@ public final class LocationUtil {
             y = NumberUtil.constrainToRange(origY + VOLUME[i].y, worldMinY, worldMaxY);
             z = origZ + VOLUME[i].z;
         }
-        while (isBlockUnsafe(ess, world, x, y, z)) {
+        while (isBlockUnsafe(ess, world, x, y, z, worldMaxY)) {
             y += 1;
             if (y >= worldMaxY) {
                 x += 1;
                 break;
             }
         }
-        while (isBlockUnsafe(ess, world, x, y, z)) {
+        while (isBlockUnsafe(ess, world, x, y, z, worldMaxY)) {
             y -= 1;
             if (y <= worldMinY + 1) {
                 x += 1;
@@ -278,13 +287,14 @@ public final class LocationUtil {
     }
 
     public static boolean shouldFly(IEssentials ess, final Location loc) {
+        final WorldInfoProvider worldInfoProvider = ess.provider(WorldInfoProvider.class);
         final World world = loc.getWorld();
         final int x = loc.getBlockX();
         int y = (int) Math.round(loc.getY());
         final int z = loc.getBlockZ();
         int count = 0;
         // Check whether more than 2 unsafe block are below player.
-        while (LocationUtil.isBlockUnsafe(ess, world, x, y, z) && y >= ess.getWorldInfoProvider().getMinHeight(world)) {
+        while (LocationUtil.isBlockUnsafe(ess, world, x, y, z) && y >= worldInfoProvider.getMinHeight(world)) {
             y--;
             count++;
             if (count > 2) {
@@ -293,7 +303,7 @@ public final class LocationUtil {
         }
 
         // If not then check if player is in the void
-        return y < ess.getWorldInfoProvider().getMinHeight(world);
+        return y < worldInfoProvider.getMinHeight(world);
     }
 
     public static class Vector3D {

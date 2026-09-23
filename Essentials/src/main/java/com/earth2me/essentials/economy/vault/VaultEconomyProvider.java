@@ -61,7 +61,7 @@ public class VaultEconomyProvider implements Economy {
 
     @Override
     public String format(double amount) {
-        return NumberUtil.displayCurrency(BigDecimal.valueOf(amount), ess);
+        return ess.getAdventureFacet().miniToLegacy(NumberUtil.displayCurrency(BigDecimal.valueOf(amount), ess));
     }
 
     @Override

@@ -5,7 +5,6 @@ import com.earth2me.essentials.User;
 import com.earth2me.essentials.utils.FormatUtil;
 import net.ess3.api.TranslatableException;
 import net.ess3.api.events.NickChangeEvent;
-import org.bukkit.ChatColor;
 import org.bukkit.Server;
 
 import java.util.Collections;
@@ -49,7 +48,8 @@ public class Commandnick extends EssentialsLoopCommand {
             target.sendTl("nickNoMore");
         } else if (target.getName().equalsIgnoreCase(nick)) {
             setNickname(server, sender, target, nick);
-            if (!target.getDisplayName().equalsIgnoreCase(target.getDisplayName())) {
+            final String strippedDisplay = FormatUtil.stripFormat(target.getDisplayName());
+            if (strippedDisplay != null && !strippedDisplay.equalsIgnoreCase(target.getName())) {
                 target.sendTl("nickNoMore");
             }
             target.sendTl("nickSet", ess.getSettings().changeDisplayName() ? target.getDisplayName() : nick);
@@ -63,7 +63,7 @@ public class Commandnick extends EssentialsLoopCommand {
 
     private String formatNickname(final User user, final String nick) throws Exception {
         final String newNick = user == null ? FormatUtil.replaceFormat(nick) : FormatUtil.formatString(user, "essentials.nick", nick);
-        if (!newNick.matches("^[a-zA-Z_0-9" + ChatColor.COLOR_CHAR + "]+$") && user != null && !user.isAuthorized("essentials.nick.allowunsafe")) {
+        if (!newNick.matches(ess.getSettings().getNickRegex()) && user != null && !user.isAuthorized("essentials.nick.allowunsafe")) {
             throw new TranslatableException("nickNamesAlpha");
         } else if (getNickLength(newNick) > ess.getSettings().getMaxNickLength()) {
             throw new TranslatableException("nickTooLong");
@@ -87,7 +87,10 @@ public class Commandnick extends EssentialsLoopCommand {
     }
 
     private int getNickLength(final String nick) {
-        return ess.getSettings().ignoreColorsInMaxLength() ? ChatColor.stripColor(nick).length() : nick.length();
+        if (ess.getSettings().ignoreColorsInMaxLength()) {
+            return FormatUtil.stripFormat(nick).length();
+        }
+        return FormatUtil.unformatString(nick).length();
     }
 
     private boolean nickInUse(final User target, final String nick) {
@@ -118,7 +121,7 @@ public class Commandnick extends EssentialsLoopCommand {
     @Override
     protected List<String> getTabCompleteOptions(final Server server, final CommandSource sender, final String commandLabel, final String[] args) {
         if (args.length == 1 && sender.isAuthorized("essentials.nick.others")) {
-            return getPlayers(server, sender);
+            return getPlayers(sender);
         } else {
             return Collections.emptyList();
         }

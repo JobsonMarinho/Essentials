@@ -53,7 +53,7 @@ public class Commandspawn extends EssentialsCommand {
         respawn(sender, null, user, null, commandLabel, future);
         future.thenAccept(success -> {
             if (success) {
-                user.sendTl("teleportAtoB", Console.DISPLAY_NAME, "spawn");
+                user.sendTl("teleportAtoB", Console.displayName(), "spawn");
             }
         });
     }
@@ -61,7 +61,7 @@ public class Commandspawn extends EssentialsCommand {
     @Override
     protected List<String> getTabCompleteOptions(final Server server, final CommandSource sender, final String commandLabel, final String[] args) {
         if (args.length == 1 && sender.isAuthorized("essentials.spawn.others")) {
-            return getPlayers(server, sender);
+            return getPlayers(sender);
         }
         return Collections.emptyList();
     }
@@ -71,7 +71,6 @@ public class Commandspawn extends EssentialsCommand {
         if (spawn == null) {
             return;
         }
-        sender.sendTl("teleporting", spawn.getWorld().getName(), spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
         future.exceptionally(e -> {
             showError(sender.getSender(), e, commandLabel);
             return false;
@@ -83,8 +82,14 @@ public class Commandspawn extends EssentialsCommand {
         }
         if (teleportOwner == null) {
             teleportee.getAsyncTeleport().now(spawn, false, TeleportCause.COMMAND, future);
-            return;
+        } else {
+            teleportOwner.getAsyncTeleport().teleportPlayer(teleportee, spawn, charge, TeleportCause.COMMAND, future);
         }
-        teleportOwner.getAsyncTeleport().teleportPlayer(teleportee, spawn, charge, TeleportCause.COMMAND, future);
+        future.thenAccept(success -> {
+            if (success) {
+                sender.sendTl("teleporting", spawn.getWorld().getName(), spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
+            }
+        });
+
     }
 }

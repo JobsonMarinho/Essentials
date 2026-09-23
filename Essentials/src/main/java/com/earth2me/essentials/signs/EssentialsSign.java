@@ -5,16 +5,18 @@ import com.earth2me.essentials.CommandSource;
 import com.earth2me.essentials.MetaItemStack;
 import com.earth2me.essentials.Trade;
 import com.earth2me.essentials.User;
-import com.earth2me.essentials.utils.AdventureUtil;
+import com.earth2me.essentials.adventure.AdventureUtil;
 import com.earth2me.essentials.utils.FormatUtil;
 import com.earth2me.essentials.utils.MaterialUtil;
 import com.earth2me.essentials.utils.NumberUtil;
 import com.earth2me.essentials.utils.VersionUtil;
 import net.ess3.api.IEssentials;
 import net.ess3.api.MaxMoneyException;
+import net.ess3.api.TranslatableException;
 import net.ess3.api.events.SignBreakEvent;
 import net.ess3.api.events.SignCreateEvent;
 import net.ess3.api.events.SignInteractEvent;
+import net.ess3.provider.SignDataProvider;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -104,7 +106,7 @@ public class EssentialsSign {
             // they won't change it to §1[Signname]
             return true;
         }
-        sign.setLine(0, AdventureUtil.miniToLegacy(tlLiteral("signFormatFail", this.signName)));
+        sign.setLine(0, ess.getAdventureFacet().miniToLegacy(tlLiteral("signFormatFail", this.signName)));
 
         final SignCreateEvent signEvent = new SignCreateEvent(sign, this, user);
         ess.getServer().getPluginManager().callEvent(signEvent);
@@ -138,7 +140,7 @@ public class EssentialsSign {
     }
 
     public String getSuccessName() {
-        String successName = AdventureUtil.miniToLegacy(tlLiteral("signFormatSuccess", this.signName));
+        String successName = AdventureUtil.getAdventureFacet().miniToLegacy(tlLiteral("signFormatSuccess", this.signName));
         if (successName.isEmpty() || !successName.contains(this.signName)) {
             // Set to null to cause an error in place of no functionality. This makes an error obvious as opposed to leaving users baffled by lack of
             // functionality.
@@ -148,7 +150,7 @@ public class EssentialsSign {
     }
 
     public String getTemplateName() {
-        return AdventureUtil.miniToLegacy(tlLiteral("signFormatTemplate", this.signName));
+        return AdventureUtil.getAdventureFacet().miniToLegacy(tlLiteral("signFormatTemplate", this.signName));
     }
 
     public String getName() {
@@ -166,24 +168,26 @@ public class EssentialsSign {
     }
 
     public void setOwnerData(final IEssentials ess, final User user, final ISign signProvider) {
-        if (ess.getSignDataProvider() == null) {
+        final SignDataProvider dataProvider = ess.provider(SignDataProvider.class);
+        if (dataProvider == null) {
             return;
         }
         final Sign sign = (Sign) signProvider.getBlock().getState();
-        ess.getSignDataProvider().setSignData(sign, SIGN_OWNER_KEY, user.getUUID().toString());
+        dataProvider.setSignData(sign, SIGN_OWNER_KEY, user.getUUID().toString());
     }
 
     public boolean isOwner(final IEssentials ess, final User user, final ISign signProvider, final int nameIndex, final String namePrefix) {
+        final SignDataProvider dataProvider = ess.provider(SignDataProvider.class);
         final Sign sign = (Sign) signProvider.getBlock().getState();
-        if (ess.getSignDataProvider() == null || ess.getSignDataProvider().getSignData(sign, SIGN_OWNER_KEY) == null) {
+        if (dataProvider == null || dataProvider.getSignData(sign, SIGN_OWNER_KEY) == null) {
             final boolean isLegacyOwner = FormatUtil.stripFormat(signProvider.getLine(nameIndex)).equalsIgnoreCase(getUsername(user));
-            if (ess.getSignDataProvider() != null && isLegacyOwner) {
-                ess.getSignDataProvider().setSignData(sign, SIGN_OWNER_KEY, user.getUUID().toString());
+            if (dataProvider != null && isLegacyOwner) {
+                dataProvider.setSignData(sign, SIGN_OWNER_KEY, user.getUUID().toString());
             }
             return isLegacyOwner;
         }
 
-        if (user.getUUID().toString().equals(ess.getSignDataProvider().getSignData(sign, SIGN_OWNER_KEY))) {
+        if (user.getUUID().toString().equals(dataProvider.getSignData(sign, SIGN_OWNER_KEY))) {
             signProvider.setLine(nameIndex, namePrefix + getUsername(user));
             return true;
         }
@@ -408,6 +412,10 @@ public class EssentialsSign {
             item.setAmount(quantity);
             return item;
         } catch (final Exception ex) {
+            if (ex instanceof TranslatableException) {
+                final TranslatableException te = (TranslatableException) ex;
+                throw new SignException(ex, te.getTlKey(), te.getArgs());
+            }
             throw new SignException(ex, "errorWithMessage", ex.getMessage());
         }
     }

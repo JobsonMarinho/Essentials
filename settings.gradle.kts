@@ -3,30 +3,26 @@ dependencyResolutionManagement {
         flatDir {
             dirs("libs")
         }
+        maven("https://repo.papermc.io/repository/maven-public/")
         maven("https://hub.spigotmc.org/nexus/content/groups/public/") {
             content {
                 includeGroup("org.spigotmc")
                 includeGroup("net.md_5")
             }
         }
-        maven("https://repo.papermc.io/repository/maven-public/")
-        maven("https://jitpack.io") {
-            content { includeGroup("com.github.milkbowl") }
-            content { includeGroup("com.github.MinnDevelopment") }
+        maven("https://repo.essentialsx.net/releases") {
+            content {
+                includeGroup("net.essentialsx.deps")
+            }
         }
         maven("https://repo.codemc.org/repository/maven-public") {
             content { includeGroup("org.bstats") }
         }
-        maven("https://repo.extendedclip.com/content/repositories/placeholderapi/") {
+        maven("https://repo.helpch.at/releases/") {
             content { includeGroup("me.clip") }
         }
         maven("https://libraries.minecraft.net/") {
             content { includeGroup("com.mojang") }
-        }
-        mavenCentral {
-            content { includeGroup("net.dv8tion") }
-            content { includeGroup("net.kyori") }
-            content { includeGroup("org.apache.logging.log4j") }
         }
     }
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
@@ -34,6 +30,10 @@ dependencyResolutionManagement {
 
 pluginManagement {
     includeBuild("build-logic")
+}
+
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
 rootProject.name = "EssentialsXParent"

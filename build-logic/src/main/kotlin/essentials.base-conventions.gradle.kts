@@ -10,14 +10,20 @@ plugins {
 val baseExtension = extensions.create<EssentialsBaseExtension>("essentials", project)
 
 val checkstyleVersion = "8.36.2"
-val spigotVersion = "1.21.1-R0.1-SNAPSHOT"
-val junit5Version = "5.10.2"
-val mockitoVersion = "3.12.4"
+val paperVersion = "26.3-pre-2.build.0-alpha"
+val paperTestVersion = "1.21.8-R0.1-SNAPSHOT"
+val junit5Version = "5.12.2"
+val junitPlatformVersion = "1.12.2"
+val mockitoVersion = "5.18.0"
 
 dependencies {
-    testImplementation("org.junit.jupiter", "junit-jupiter", junit5Version)
-    testImplementation("org.junit.vintage", "junit-vintage-engine", junit5Version)
-    testImplementation("org.mockito", "mockito-core", mockitoVersion)
+    testImplementation("org.junit.jupiter:junit-jupiter:${junit5Version}")
+    testImplementation("org.junit.platform:junit-platform-launcher:${junitPlatformVersion}")
+    testImplementation("org.mockito:mockito-core:${mockitoVersion}")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.76.1") {
+        exclude(module = "paper-api")
+        exclude(module = "spigot-api")
+    }
 
     constraints {
         implementation("org.yaml:snakeyaml:1.28") {
@@ -27,20 +33,51 @@ dependencies {
 }
 
 tasks.test {
+    useJUnitPlatform()
     testLogging {
         events("PASSED", "SKIPPED", "FAILED")
     }
+
+    val testTmp = rootProject.layout.projectDirectory.dir("test-tmp").asFile
+    doFirst {
+        testTmp.mkdirs()
+    }
+    systemProperty("java.io.tmpdir", testTmp.absolutePath)
 }
 
 afterEvaluate {
     if (baseExtension.injectBukkitApi.get()) {
         dependencies {
-            api("org.spigotmc", "spigot-api", spigotVersion)
+            api("io.papermc.paper:paper-api:${paperVersion}")
+            testImplementation("io.papermc.paper:paper-api:${paperTestVersion}")
+        }
+
+        configurations {
+            testCompileClasspath {
+                resolutionStrategy {
+                    dependencySubstitution {
+                        substitute( module("io.papermc.paper:paper-api"))
+                            .using(module("io.papermc.paper:paper-api:$paperTestVersion"))
+                    }
+                }
+            }
+            testRuntimeClasspath {
+                resolutionStrategy {
+                    dependencySubstitution {
+                        substitute( module("io.papermc.paper:paper-api"))
+                            .using(module("io.papermc.paper:paper-api:$paperTestVersion"))
+                    }
+                }
+            }
+        }
+
+        java {
+            disableAutoTargetJvm()
         }
     }
     if (baseExtension.injectBstats.get()) {
         dependencies {
-            implementation("org.bstats", "bstats-bukkit", "2.2.1")
+            implementation("org.bstats:bstats-bukkit:2.2.1")
         }
     }
 }
@@ -89,6 +126,19 @@ configurations.all {
     resolutionStrategy.cacheChangingModulesFor(5, "minutes")
 }
 
+// Select Paper in-dev adventure versions (for snapshot/pre-releases) when available
+configurations.configureEach {
+    resolutionStrategy.capabilitiesResolution.all {
+        if (candidates.size >= 2) {
+            val unstable = candidates.find { c -> c.id.displayName.startsWith("io.papermc") }
+            val stable = candidates.find { c -> c.id.displayName.startsWith("net.kyori") }
+            if (unstable != null && stable != null) {
+                select(unstable)
+            }
+        }
+    }
+}
+
 indra {
     checkstyle(checkstyleVersion)
 
@@ -125,7 +175,7 @@ indra {
 
     javaVersions {
         target(8)
-        minimumToolchain(21)
+        minimumToolchain(25)
         // Don't enforce running tests on Java 8; we only care about the release for compiling, not running tests
         strictVersions(false)
     }
