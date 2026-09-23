@@ -4,6 +4,11 @@ import com.earth2me.essentials.api.IAsyncTeleport;
 import com.earth2me.essentials.commands.WarpNotFoundException;
 import com.earth2me.essentials.utils.DateUtil;
 import com.earth2me.essentials.utils.LocationUtil;
+import com.sk89q.worldguard.bukkit.WGBukkit;
+import com.sk89q.worldguard.protection.ApplicableRegionSet;
+import com.sk89q.worldguard.protection.flags.DefaultFlag;
+import com.sk89q.worldguard.protection.flags.StateFlag;
+import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import io.papermc.lib.PaperLib;
 import net.ess3.api.IEssentials;
 import net.ess3.api.IUser;
@@ -17,10 +22,12 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+import org.bukkit.inventory.ItemStack;
 
 import java.math.BigDecimal;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -186,6 +193,22 @@ public class AsyncTeleport implements IAsyncTeleport {
             targetLoc.setX(LocationUtil.getXInsideWorldBorder(targetLoc.getWorld(), targetLoc.getBlockX()));
             targetLoc.setZ(LocationUtil.getZInsideWorldBorder(targetLoc.getWorld(), targetLoc.getBlockZ()));
         }
+        if (!teleportee.isAuthorized("essentials.teleport.timer.bypass")) { // && hasMobFarm(teleportee.getBase())
+            boolean preventTeleportedByRestrictedRegion = false;
+            ApplicableRegionSet regionSet = WGBukkit.getRegionManager(targetLoc.getWorld()).getApplicableRegions(targetLoc);
+            if (regionSet.getRegions() != null && !regionSet.getRegions().isEmpty()) {
+                for (ProtectedRegion region : regionSet.getRegions()) {
+                    if (region.getFlag(DefaultFlag.SLEEP) == StateFlag.State.DENY) {
+                        preventTeleportedByRestrictedRegion = true;
+                        break;
+                    }
+                }
+            }
+            if (preventTeleportedByRestrictedRegion) {
+                future.completeExceptionally(new IllegalAccessException("§cVocê não pode ser teleportado para essa região."));
+                return;
+            }
+        }
         PaperLib.getChunkAtAsync(targetLoc.getWorld(), targetLoc.getBlockX() >> 4, targetLoc.getBlockZ() >> 4, true, true).thenAccept(chunk -> {
             Location loc = targetLoc;
             if (LocationUtil.isBlockUnsafeForUser(ess, teleportee, chunk.getWorld(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ())) {
@@ -223,6 +246,15 @@ public class AsyncTeleport implements IAsyncTeleport {
             future.completeExceptionally(th);
             return null;
         });
+    }
+
+    private boolean hasMobFarm(Player base) {
+        for (ItemStack item : base.getInventory()) {
+            if (item != null && item.hasItemMeta() && Objects.requireNonNull(item.getItemMeta()).hasDisplayName() && item.getItemMeta().getDisplayName().toLowerCase().contains("farm")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

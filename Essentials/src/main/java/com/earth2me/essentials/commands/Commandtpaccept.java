@@ -4,19 +4,29 @@ import com.earth2me.essentials.AsyncTeleport;
 import com.earth2me.essentials.IUser;
 import com.earth2me.essentials.Trade;
 import com.earth2me.essentials.User;
+import com.sk89q.worldguard.bukkit.WGBukkit;
+import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
+import com.sk89q.worldguard.protection.ApplicableRegionSet;
+import com.sk89q.worldguard.protection.flags.DefaultFlag;
+import com.sk89q.worldguard.protection.flags.Flag;
+import com.sk89q.worldguard.protection.flags.StateFlag;
+import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.ess3.api.TranslatableException;
 import net.essentialsx.api.v2.events.TeleportRequestResponseEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Server;
+import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class Commandtpaccept extends EssentialsCommand {
+
     public Commandtpaccept() {
         super("tpaccept");
     }
@@ -112,7 +122,39 @@ public class Commandtpaccept extends EssentialsCommand {
             return false;
         });
         if (request.isHere()) {
-            final Location loc = request.getLocation();
+            final Location loc = requester.getBase().getLocation();
+            boolean preventTeleportedByRestrictedRegion = false;
+            ApplicableRegionSet regionSet = WGBukkit.getRegionManager(loc.getWorld()).getApplicableRegions(loc);
+            if (regionSet.getRegions() != null && !regionSet.getRegions().isEmpty()) {
+                for (ProtectedRegion region : regionSet.getRegions()) {
+                    if (region.getFlag(DefaultFlag.SLEEP) == StateFlag.State.DENY) {
+                        preventTeleportedByRestrictedRegion = true;
+                        break;
+                    }
+                }
+            }
+
+            final Location loc2 = user.getBase().getLocation();
+            ApplicableRegionSet regionSet2 = WGBukkit.getRegionManager(loc2.getWorld()).getApplicableRegions(loc2);
+            if (regionSet2.getRegions() != null && !regionSet2.getRegions().isEmpty()) {
+                for (ProtectedRegion region : regionSet2.getRegions()) {
+                    if (region.getFlag(DefaultFlag.SLEEP) == StateFlag.State.DENY) {
+                        preventTeleportedByRestrictedRegion = true;
+                        break;
+                    }
+                }
+            }
+
+            if (preventTeleportedByRestrictedRegion) {
+                requester.sendMessage("§cVocê não pode ser teleportado para essa região.");
+                user.sendMessage("§cO jogador não pode ser teleportado para essa região.");
+
+                for (Player staff : Bukkit.getOnlinePlayers().stream().filter(p -> p.hasPermission("essentials.god")).collect(Collectors.toList())) {
+                    staff.sendMessage("§4[!] §cO jogador " + requester.getName() + " tentou ser teleportado para uma região restrita por " + user.getName() + ".");
+                }
+
+                return;
+            }
             final AsyncTeleport teleport = requester.getAsyncTeleport();
             teleport.setTpType(AsyncTeleport.TeleportType.TPA);
             future.thenAccept(success -> {
@@ -124,6 +166,39 @@ public class Commandtpaccept extends EssentialsCommand {
         } else {
             final AsyncTeleport teleport = requester.getAsyncTeleport();
             teleport.setTpType(AsyncTeleport.TeleportType.TPA);
+            boolean preventTeleportedByRestrictedRegion = false;
+            final Location loc = requester.getBase().getLocation();
+            ApplicableRegionSet regionSet = WGBukkit.getRegionManager(loc.getWorld()).getApplicableRegions(loc);
+            if (regionSet.getRegions() != null && !regionSet.getRegions().isEmpty()) {
+                for (ProtectedRegion region : regionSet.getRegions()) {
+                    if (region.getFlag(DefaultFlag.SLEEP) == StateFlag.State.DENY) {
+                        preventTeleportedByRestrictedRegion = true;
+                        break;
+                    }
+                }
+            }
+
+            final Location loc2 = user.getBase().getLocation();
+            ApplicableRegionSet regionSet2 = WGBukkit.getRegionManager(loc2.getWorld()).getApplicableRegions(loc2);
+            if (regionSet2.getRegions() != null && !regionSet2.getRegions().isEmpty()) {
+                for (ProtectedRegion region : regionSet2.getRegions()) {
+                    if (region.getFlag(DefaultFlag.SLEEP) == StateFlag.State.DENY) {
+                        preventTeleportedByRestrictedRegion = true;
+                        break;
+                    }
+                }
+            }
+
+            if (preventTeleportedByRestrictedRegion) {
+                requester.sendMessage("§cVocê não pode ser teleportado para essa região.");
+                user.sendMessage("§cO jogador não pode ser teleportado para essa região.");
+
+                for (Player staff : Bukkit.getOnlinePlayers().stream().filter(p -> p.hasPermission("essentials.god")).collect(Collectors.toList())) {
+                    staff.sendMessage("§4[!] §cO jogador " + requester.getName() + " tentou ser teleportado para uma região restrita por " + user.getName() + ".");
+                }
+
+                return;
+            }
             teleport.teleport(user.getBase(), charge, TeleportCause.COMMAND, future);
         }
         user.removeTpaRequest(request.getName());
