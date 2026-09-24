@@ -654,9 +654,16 @@ public class User extends UserData implements Comparable<User>, IMessageRecipien
         ess.getServer().getPluginManager().callEvent(updateEvent);
         final BigDecimal newBalance = updateEvent.getNewBalance();
 
+        // Valida ANTES de mexer na camada: a camada (outra economia via Vault) move o dinheiro de
+        // verdade, e recusar só depois deixava o saldo alterado com a operação respondendo falha.
+        if (newBalance.compareTo(ess.getSettings().getMaxMoney()) > 0) {
+            throw new MaxMoneyException();
+        }
+        final BigDecimal effectiveBalance = newBalance.max(ess.getSettings().getMinMoney());
+
         final EconomyLayer layer = EconomyLayers.getSelectedLayer();
         if (layer != null && (layer.hasAccount(getBase()) || layer.createPlayerAccount(getBase()))) {
-            layer.set(getBase(), newBalance);
+            layer.set(getBase(), effectiveBalance);
         }
         super.setMoney(newBalance, true);
         Trade.log("Update", "Set", "API", getName(), new Trade(newBalance, ess), null, null, null, newBalance, ess);
