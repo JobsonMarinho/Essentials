@@ -23,6 +23,13 @@ public class SpigotAdventureFacet implements AdventureFacet {
     private static final LegacyComponentSerializer LEGACY_SERIALIZER;
     private static final LegacyComponentSerializer LEGACY_SERIALIZER_URLS;
     private static final MiniMessage MINI_MESSAGE_NO_TAGS;
+    /**
+     * Abaixo da 1.16 as mensagens vão como texto legado (§) direto no sendMessage.
+     * No iSpigot 1.8 os facets do adventure-platform 4.4 falham por dentro e o Knob só registra com
+     * -Dnet.kyori.adventure.debug=true: toda mensagem do Essentials sumia sem erro nenhum.
+     * Sem hex nessas versões, o texto legado não perde cor — só clique e hover.
+     */
+    private static final boolean LEGACY_TEXT_ONLY = !VersionUtil.getServerBukkitVersion().isHigherThanOrEqualTo(VersionUtil.v1_16_1_R01);
 
     static {
         final LegacyComponentSerializer.Builder builder = LegacyComponentSerializer.builder()
@@ -81,12 +88,27 @@ public class SpigotAdventureFacet implements AdventureFacet {
 
     @Override
     public void send(CommandSender sender, ComponentHolder component) {
+        if (LEGACY_TEXT_ONLY) {
+            sendLegacy(sender, (Component) component.getComponent());
+            return;
+        }
         bukkitAudiences.sender(sender).sendMessage((Component) component.getComponent());
     }
 
     @Override
     public void send(Player player, ComponentHolder component) {
+        if (LEGACY_TEXT_ONLY) {
+            sendLegacy(player, (Component) component.getComponent());
+            return;
+        }
         bukkitAudiences.player(player).sendMessage((Component) component.getComponent());
+    }
+
+    private void sendLegacy(final CommandSender sender, final Component component) {
+        final String legacy = LEGACY_SERIALIZER.serialize(component);
+        if (!legacy.isEmpty()) {
+            sender.sendMessage(legacy);
+        }
     }
 
     @Override
